@@ -1,4 +1,4 @@
-# Guide d'utilisation du Script d'Audit Yourtext guru automatique
+# Guide d'utilisation du Script d'Audit mot-clé via Yourtext guru en automatique
 
 Ce script permet d'automatiser tout le travail de Yourtext Guru : 
 1. Le scrap du contenu des URLs spécifiées dans un fichier CSV
