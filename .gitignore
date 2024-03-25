@@ -1,0 +1,39 @@
+# Environnements virtuels
+venv/
+env/
+.venv/
+env.bak/
+venv.bak/
+mon_env/
+
+# Fichiers d'environnement
+.env
+.env.local
+.env.*.local
+
+# Fichiers spécifiques aux systèmes d'exploitation
+.DS_Store
+
+# Autres fichiers spécifiques à des environnements virtuels
+python-version
+pip-log.txt
+*.pyc
+
+# Dossiers __pycache__
+__pycache__/
+*.py[cod]
+
+# Fichiers de packages
+*.egg
+*.egg-info
+dist/
+build/
+eggs/
+parts/
+bin/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
