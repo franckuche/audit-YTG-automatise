@@ -6,6 +6,8 @@ import os
 import time
 from dotenv import load_dotenv
 import statistics
+from urllib.parse import urlencode
+
 
 # Charger les variables d'environnement depuis le fichier .env
 load_dotenv()
@@ -33,7 +35,7 @@ def fetch_guide_id(keyword, lang='fr_fr'):
             print(f"ID de guide récupéré pour '{keyword}': {guide_id}")
             return guide_id
         elif response.status_code == 429:
-            retry_after = int(response.headers.get('Retry-After', 30))
+            retry_after = int(response.headers.get('Retry-After', 35))
             print(f"Tentative {attempt} pour '{keyword}': Trop de tentatives. Réessai dans {retry_after} secondes...")
             time.sleep(retry_after)
         else:
@@ -47,23 +49,27 @@ def fetch_scores(guide_id, content, keyword):
     URL_CHECK = f'https://yourtext.guru/api/check/{guide_id}'
 
     headers = {'KEY': API_KEY, 'accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded'}
-    data = f'content={content}'
+    data = {'content': content}
+    
+    # Afficher le contenu envoyé à l'API
+    print("Contenu envoyé à l'API :")
+    print(data)
 
     attempt = 1
     while attempt <= 3:
-        response = requests.post(URL_CHECK, headers=headers, data=data)
+        response = requests.post(URL_CHECK, headers=headers, data=urlencode(data).encode('utf-8'))
         if response.status_code == 200:
             data = response.json()
             if 'errors' in data and 'No Corresponding Guide' in data['errors']:
                 print(f"Erreur 'No Corresponding Guide', réessai dans 20 secondes...")
-                time.sleep(20)
+                time.sleep(35)
             else:
                 score_seo = data.get('score', 0)
                 danger = data.get('danger', 0)
                 print(f"Scores récupérés pour '{keyword}': SEO={score_seo}, Danger={danger}")
                 return {"data": data, "score_seo": score_seo, "danger": danger}
         elif response.status_code == 429:
-            print(f"Tentative {attempt} pour '{keyword}': Trop de tentatives. Réessai dans 20 secondes...")
+            print(f"Tentative {attempt} pour '{keyword}': Trop de tentatives. Réessai dans 35 secondes...")
             time.sleep(20)
         else:
             print(f"Erreur lors de la récupération des scores pour le guide ID '{guide_id}' et le mot-clé '{keyword}': {response.text}")
