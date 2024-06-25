@@ -1,13 +1,13 @@
 import argparse
 import csv
 import requests
-import trafilatura
 import os
 import time
 from dotenv import load_dotenv
 import statistics
 from urllib.parse import urlencode
-
+from bs4 import BeautifulSoup
+import pandas as pd
 
 # Charger les variables d'environnement depuis le fichier .env
 load_dotenv()
@@ -16,11 +16,48 @@ load_dotenv()
 API_KEY = os.getenv('YTG_API')
 
 def get_url_content(url):
-    print(f"Début de l'extraction du contenu pour: {url}")
-    res = trafilatura.fetch_url(url)
-    content = trafilatura.extract(res) if res else "Échec de la récupération"
-    print(f"Fin de l'extraction pour: {url}. Succès: {'oui' if content else 'non'}.")
-    return content
+    print(f"Processing {url}")
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.content, 'html.parser')
+            # Extract all text from the page
+            content = soup.get_text(separator=' ', strip=True)
+            print("Content successfully retrieved.")
+            return content
+        else:
+            print(f"Error fetching content for {url}: {response.status_code}")
+            return "Content not available"
+    except Exception as e:
+        print(f"Error fetching content for {url}: {e}")
+        return "Content not available"
+
+def process_csv_and_add_content(nom_fichier_csv):
+    colonnes_necessaires = ['KEYWORD', 'URL']  # Required columns
+
+    print("Reading the CSV file...")
+    try:
+        df = pd.read_csv(nom_fichier_csv, usecols=colonnes_necessaires)
+        print("CSV file successfully loaded.")
+    except FileNotFoundError:
+        print(f"The file {nom_fichier_csv} does not exist")
+        exit(1)
+    except Exception as e:
+        print(f"Error reading the CSV file: {e}")
+        exit(1)
+
+    print("Processing URLs and saving line by line...")
+    df['CONTENT'] = ''
+    for index, row in df.iterrows():
+        content = get_url_content(row['URL'])
+        df.at[index, 'CONTENT'] = content  # Update the row with the retrieved content
+        print(f"Line {index + 1}: {row['URL']} - Content added")
+
+    # Save the CSV file after processing all rows
+    output_file = "processed_" + nom_fichier_csv
+    df.to_csv(output_file, index=False)
+    print("All data has been processed and saved.")
+    return output_file
 
 def fetch_guide_id(keyword, lang='fr_fr'):
     print(f"Début de la récupération de l'ID de guide pour le mot-clé: '{keyword}'")
@@ -114,14 +151,20 @@ def process_file(input_file, lang='en'):
     output_filename = os.path.splitext(input_file)[0] + '_final_scores.csv'
     guides_info = []
 
-    with open(input_file, mode='r', encoding='utf-8') as csv_input:
-        reader = csv.DictReader(csv_input)
-        for row in reader:
-            url, keyword = row['URL'], row['KEYWORD']
-            content = get_url_content(url)
-            guide_id = fetch_guide_id(keyword, lang)
-            if guide_id:
-                guides_info.append({'keyword': keyword, 'url': url, 'content': content, 'guide_id': guide_id})
+    # Charger les données CSV en utilisant pandas
+    df = pd.read_csv(input_file, usecols=['URL', 'KEYWORD', 'CONTENT'])
+    print("CSV file successfully loaded.")
+
+    print("Processing URLs and adding content...")
+    for index, row in df.iterrows():
+        keyword = row['KEYWORD']
+        content = row['CONTENT']
+        guide_id = fetch_guide_id(keyword, lang)
+        if guide_id:
+            guides_info.append({'keyword': keyword, 'url': row['URL'], 'content': content, 'guide_id': guide_id})
+        else:
+            guides_info.append({'keyword': keyword, 'url': row['URL'], 'content': content, 'guide_id': 'ERROR'})
+            print(f"Failed to get guide ID for {keyword}")
 
     print("Attente pour la disponibilité des guides...")
     time.sleep(60)  # Ajustez ce délai selon les besoins
@@ -132,6 +175,21 @@ def process_file(input_file, lang='en'):
         writer.writerow(headers)
 
         for guide_info in guides_info:
+            if guide_info['guide_id'] == 'ERROR':
+                writer.writerow([
+                    guide_info['keyword'], 
+                    guide_info['url'], 
+                    guide_info['content'], 
+                    'ERROR', 
+                    'ERROR', 
+                    'ERROR', 
+                    'ERROR', 
+                    'ERROR', 
+                    'ERROR', 
+                    'ERROR'
+                ])
+                continue
+
             scores = fetch_scores(guide_info['guide_id'], guide_info['content'], guide_info['keyword'])
             if scores:
                 # Appel à fetch_serp_and_calculate_averages pour chaque guide
@@ -148,8 +206,22 @@ def process_file(input_file, lang='en'):
                     dseo_avg_3,  # Ajout de la moyenne DSEO pour les 3 premiers
                     dseo_avg_5   # Ajout de la moyenne DSEO pour les 5 premiers
                 ])
+            else:
+                writer.writerow([
+                    guide_info['keyword'], 
+                    guide_info['url'], 
+                    guide_info['content'], 
+                    guide_info['guide_id'], 
+                    'ERROR', 
+                    'ERROR', 
+                    'ERROR', 
+                    'ERROR', 
+                    'ERROR', 
+                    'ERROR'
+                ])
 
     print(f"Les données ont été enregistrées dans {output_filename}.")
+    return output_filename
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Script pour récupérer le contenu des URLs, récupérer les IDs de guides et les scores associés.")
@@ -157,5 +229,9 @@ if __name__ == "__main__":
     parser.add_argument('-l', '--lang', default='en', help="Langue pour la demande de guide.")
     args = parser.parse_args()
 
-    process_file(args.file, args.lang)
+    # Première étape : traiter le fichier CSV initial pour ajouter le contenu des URLs
+    processed_file = process_csv_and_add_content(args.file)
 
+    # Deuxième étape : utiliser le fichier traité pour récupérer les scores et les données SERP
+    final_output_file = process_file(processed_file, args.lang)
+    print(f"Traitement final terminé. Fichier de sortie : {final_output_file}")
