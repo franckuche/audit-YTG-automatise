@@ -37,3 +37,9 @@ develop-eggs/
 .installed.cfg
 lib/
 lib64/
+
+# Fichiers CSV
+coucou.csv
+coucou_final_scores.csv
+processed_test1.csv
+test.csv
