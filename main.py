@@ -8,6 +8,7 @@ import statistics
 from urllib.parse import urlencode
 from bs4 import BeautifulSoup
 import pandas as pd
+import re
 
 # Charger les variables d'environnement depuis le fichier .env
 load_dotenv()
@@ -15,13 +16,36 @@ load_dotenv()
 # Récupérer la clé API depuis les variables d'environnement
 API_KEY = os.getenv('YTG_API')
 
+# Définir les constantes pour les URLs de l'API
+URL_GUIDE = 'https://yourtext.guru/api/guide/'
+URL_CHECK_TEMPLATE = 'https://yourtext.guru/api/check/{}'
+URL_SERP_TEMPLATE = 'https://yourtext.guru/api/serp/{}'
+
+def check_keyword(kw):
+    """Cette fonction vérifie que la requête écrite est compatible
+    avec YTG.
+    Arguments:
+    kw:(string): La requête à vérifier
+    """
+    # On regarde si la requête est trop longue
+    if len(kw) > 150:
+        print(f"Keyword '{kw}' is too long ({len(kw)} characters).")
+        return False
+    # On vérifie que la requête ne contient pas de caractères interdits
+    match = re.fullmatch(r'[\w \/"!\'\+\?\.\-:]+', kw)
+    if match is None:
+        print(f"Keyword '{kw}' contains invalid characters.")
+    return match is not None
+
 def get_url_content(url):
+    """
+    Récupère le contenu textuel d'une URL donnée.
+    """
     print(f"Processing {url}")
     try:
         response = requests.get(url)
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, 'html.parser')
-            # Extract all text from the page
             content = soup.get_text(separator=' ', strip=True)
             print("Content successfully retrieved.")
             return content
@@ -33,35 +57,52 @@ def get_url_content(url):
         return "Content not available"
 
 def process_csv_and_add_content(nom_fichier_csv):
-    colonnes_necessaires = ['KEYWORD', 'URL']  # Required columns
+    """
+    Traite un fichier CSV en ajoutant le contenu des URLs.
+    """
+    colonnes_necessaires = ['KEYWORD', 'URL']
 
-    print("Reading the CSV file...")
+    print("Lecture du fichier CSV...")
     try:
         df = pd.read_csv(nom_fichier_csv, usecols=colonnes_necessaires)
-        print("CSV file successfully loaded.")
+        print("Fichier CSV chargé avec succès.")
     except FileNotFoundError:
-        print(f"The file {nom_fichier_csv} does not exist")
+        print(f"Le fichier {nom_fichier_csv} n'existe pas")
         exit(1)
     except Exception as e:
-        print(f"Error reading the CSV file: {e}")
+        print(f"Erreur lors de la lecture du fichier CSV : {e}")
         exit(1)
 
-    print("Processing URLs and saving line by line...")
-    df['CONTENT'] = ''
-    for index, row in df.iterrows():
-        content = get_url_content(row['URL'])
-        df.at[index, 'CONTENT'] = content  # Update the row with the retrieved content
-        print(f"Line {index + 1}: {row['URL']} - Content added")
+    print("Traitement des URLs et sauvegarde ligne par ligne...")
+    df['CONTENT'] = df['URL'].apply(get_url_content)
 
-    # Save the CSV file after processing all rows
-    output_file = "processed_" + nom_fichier_csv
+    # Utiliser le chemin absolu pour le fichier d'entrée
+    nom_fichier_csv = os.path.abspath(nom_fichier_csv)
+    
+    # S'assurer que nous avons un répertoire valide pour le fichier de sortie
+    output_dir = os.path.dirname(nom_fichier_csv)
+    if not output_dir:
+        output_dir = os.getcwd()  # Utiliser le répertoire de travail actuel si aucun répertoire n'est spécifié
+    
+    output_file = os.path.join(output_dir, "processed_" + os.path.basename(nom_fichier_csv))
+    
+    # Créer le répertoire de sortie s'il n'existe pas
+    os.makedirs(output_dir, exist_ok=True)
+
     df.to_csv(output_file, index=False)
-    print("All data has been processed and saved.")
+    print(f"Toutes les données ont été traitées et sauvegardées dans {output_file}")
     return output_file
 
 def fetch_guide_id(keyword, lang='fr_fr'):
+    """
+    Récupère l'ID du guide pour un mot-clé donné.
+    """
     print(f"Début de la récupération de l'ID de guide pour le mot-clé: '{keyword}'")
-    URL_GUIDE = 'https://yourtext.guru/api/guide/'
+    
+    if not check_keyword(keyword):
+        print(f"Keyword '{keyword}' is not valid.")
+        return None
+
     headers = {'KEY': API_KEY, 'accept': 'application/json'}
     data = {'query': keyword, 'lang': lang, 'type': 'premium'}
 
@@ -82,13 +123,15 @@ def fetch_guide_id(keyword, lang='fr_fr'):
     return None
 
 def fetch_scores(guide_id, content, keyword):
+    """
+    Récupère les scores SEO pour un contenu donné et un guide spécifique.
+    """
     print(f"Récupération des scores pour le guide ID: {guide_id} et le mot-clé: {keyword}")
-    URL_CHECK = f'https://yourtext.guru/api/check/{guide_id}'
+    URL_CHECK = URL_CHECK_TEMPLATE.format(guide_id)
 
     headers = {'KEY': API_KEY, 'accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded'}
     data = {'content': content}
     
-    # Afficher le contenu envoyé à l'API
     print("Contenu envoyé à l'API :")
     print(data)
 
@@ -116,10 +159,13 @@ def fetch_scores(guide_id, content, keyword):
     return None
 
 def fetch_serp_and_calculate_averages(guide_id, keyword):
+    """
+    Récupère les données SERP et calcule les moyennes des scores SOSEO et DSEO.
+    """
     print(f"Récupération des données SERP pour le guide ID: {guide_id} et le mot-clé: '{keyword}'...")
     attempt = 1
     while attempt <= 3:
-        response = requests.get(f"https://yourtext.guru/api/serp/{guide_id}", headers={'KEY': API_KEY})
+        response = requests.get(URL_SERP_TEMPLATE.format(guide_id), headers={'KEY': API_KEY})
         if response.status_code == 200:
             serp_data = response.json().get('serps', [])
             if serp_data:
@@ -147,91 +193,59 @@ def fetch_serp_and_calculate_averages(guide_id, keyword):
     return None, None, None, None
 
 def process_file(input_file, lang='en'):
-    print(f"Début du traitement du fichier: {input_file}")
-    output_filename = os.path.splitext(input_file)[0] + '_final_scores.csv'
+    """
+    Traite le fichier CSV d'entrée et ajoute les informations de contenu.
+    """
+    print("Lecture du fichier CSV d'entrée...")
+    df = pd.read_csv(input_file)
+    output_filename = os.path.join(os.path.dirname(input_file), "processed_with_scores_" + os.path.basename(input_file))
+
+    output_dir = os.path.dirname(output_filename)
+    os.makedirs(output_dir, exist_ok=True)
+
     guides_info = []
-
-    # Charger les données CSV en utilisant pandas
-    df = pd.read_csv(input_file, usecols=['URL', 'KEYWORD', 'CONTENT'])
-    print("CSV file successfully loaded.")
-
-    print("Processing URLs and adding content...")
     for index, row in df.iterrows():
         keyword = row['KEYWORD']
         content = row['CONTENT']
         guide_id = fetch_guide_id(keyword, lang)
-        if guide_id:
-            guides_info.append({'keyword': keyword, 'url': row['URL'], 'content': content, 'guide_id': guide_id})
-        else:
-            guides_info.append({'keyword': keyword, 'url': row['URL'], 'content': content, 'guide_id': 'ERROR'})
-            print(f"Failed to get guide ID for {keyword}")
+        guides_info.append({'keyword': keyword, 'url': row['URL'], 'content': content, 'guide_id': guide_id})
 
-    print("Attente pour la disponibilité des guides...")
-    time.sleep(60)  # Ajustez ce délai selon les besoins
+    if guides_info:
+        with open(output_filename, 'w', newline='') as output_file:
+            fieldnames = ['keyword', 'url', 'guide_id', 'soseo_avg_3', 'soseo_avg_5', 'dseo_avg_3', 'dseo_avg_5', 'score_seo', 'danger']
+            writer = csv.DictWriter(output_file, fieldnames=fieldnames)
+            writer.writeheader()
 
-    with open(output_filename, mode='w', newline='', encoding='utf-8') as csv_output:
-        writer = csv.writer(csv_output)
-        headers = ['KEYWORD', 'URL', 'CONTENT', 'GUIDE_ID', 'SEO_SCORE', 'DANGER', 'SOSEO_AVG_3', 'SOSEO_AVG_5', 'DSEO_AVG_3', 'DSEO_AVG_5']
-        writer.writerow(headers)
+            for guide in guides_info:
+                if guide['guide_id']:
+                    scores = fetch_scores(guide['guide_id'], guide['content'], guide['keyword'])
+                    if scores:
+                        soseo_avg_3, soseo_avg_5, dseo_avg_3, dseo_avg_5 = fetch_serp_and_calculate_averages(guide['guide_id'], guide['keyword'])
+                        writer.writerow({
+                            'keyword': guide['keyword'],
+                            'url': guide['url'],
+                            'guide_id': guide['guide_id'],
+                            'soseo_avg_3': soseo_avg_3,
+                            'soseo_avg_5': soseo_avg_5,
+                            'dseo_avg_3': dseo_avg_3,
+                            'dseo_avg_5': dseo_avg_5,
+                            'score_seo': scores['score_seo'],
+                            'danger': scores['danger']
+                        })
+                    else:
+                        writer.writerow({'keyword': guide['keyword'], 'url': guide['url'], 'guide_id': guide['guide_id']})
+                else:
+                    writer.writerow({'keyword': guide['keyword'], 'url': guide['url'], 'guide_id': None})
 
-        for guide_info in guides_info:
-            if guide_info['guide_id'] == 'ERROR':
-                writer.writerow([
-                    guide_info['keyword'], 
-                    guide_info['url'], 
-                    guide_info['content'], 
-                    'ERROR', 
-                    'ERROR', 
-                    'ERROR', 
-                    'ERROR', 
-                    'ERROR', 
-                    'ERROR', 
-                    'ERROR'
-                ])
-                continue
-
-            scores = fetch_scores(guide_info['guide_id'], guide_info['content'], guide_info['keyword'])
-            if scores:
-                # Appel à fetch_serp_and_calculate_averages pour chaque guide
-                soseo_avg_3, soseo_avg_5, dseo_avg_3, dseo_avg_5 = fetch_serp_and_calculate_averages(guide_info['guide_id'], guide_info['keyword'])
-                writer.writerow([
-                    guide_info['keyword'], 
-                    guide_info['url'], 
-                    guide_info['content'], 
-                    guide_info['guide_id'], 
-                    scores['score_seo'], 
-                    scores['danger'],
-                    soseo_avg_3,  # Ajout de la moyenne SOSEO pour les 3 premiers
-                    soseo_avg_5,  # Ajout de la moyenne SOSEO pour les 5 premiers
-                    dseo_avg_3,  # Ajout de la moyenne DSEO pour les 3 premiers
-                    dseo_avg_5   # Ajout de la moyenne DSEO pour les 5 premiers
-                ])
-            else:
-                writer.writerow([
-                    guide_info['keyword'], 
-                    guide_info['url'], 
-                    guide_info['content'], 
-                    guide_info['guide_id'], 
-                    'ERROR', 
-                    'ERROR', 
-                    'ERROR', 
-                    'ERROR', 
-                    'ERROR', 
-                    'ERROR'
-                ])
-
-    print(f"Les données ont été enregistrées dans {output_filename}.")
+    print(f"Traitement terminé. Résultats enregistrés dans: {output_filename}")
     return output_filename
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Script pour récupérer le contenu des URLs, récupérer les IDs de guides et les scores associés.")
-    parser.add_argument('-f', '--file', required=True, help="Fichier CSV contenant les URLs et mots-clés.")
-    parser.add_argument('-l', '--lang', default='en', help="Langue pour la demande de guide.")
+    parser = argparse.ArgumentParser(description="Process SEO scores for given CSV file")
+    parser.add_argument("csv_file", help="Path to the input CSV file")
+    parser.add_argument("-l", "--lang", default="en", help="Language for the guide (default: en)")
+
     args = parser.parse_args()
 
-    # Première étape : traiter le fichier CSV initial pour ajouter le contenu des URLs
-    processed_file = process_csv_and_add_content(args.file)
-
-    # Deuxième étape : utiliser le fichier traité pour récupérer les scores et les données SERP
-    final_output_file = process_file(processed_file, args.lang)
-    print(f"Traitement final terminé. Fichier de sortie : {final_output_file}")
+    processed_csv = process_csv_and_add_content(args.csv_file)
+    process_file(processed_csv, args.lang)

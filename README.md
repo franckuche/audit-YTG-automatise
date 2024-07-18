@@ -54,7 +54,7 @@ http://exemple.com/page2,mot-clé 2
 Pour exécuter le script, utilisez la commande suivante dans votre terminal :
 
 ```python
-python main.py -f chemin_vers_votre_fichier.csv -l code_langue
+python3 main.py chemin_vers_votre_fichier.csv -l code_langue
 ```
 
 Les options sont :

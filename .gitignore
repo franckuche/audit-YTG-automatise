@@ -38,8 +38,22 @@ develop-eggs/
 lib/
 lib64/
 
-# Fichiers CSV
-coucou.csv
-coucou_final_scores.csv
-processed_test1.csv
-test.csv
+# Fichiers CSV (règle générale pour ignorer tous les fichiers CSV)
+*.csv
+
+# Logs et bases de données
+*.log
+*.sql
+*.sqlite
+
+# Fichiers d'IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Fichiers de documentation générés
+docs/_build/
+
+# Fichiers de sauvegarde
+*~
