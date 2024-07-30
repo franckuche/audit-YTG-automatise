@@ -1,8 +1,7 @@
 xlrd==1.2
-xlsxwriter
-trafilatura
 requests
 requests==2.28.1
 pandas==1.4.3
 numpy==1.23.1
 python-dotenv==0.19.0
+pytz

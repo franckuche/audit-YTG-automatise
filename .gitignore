@@ -46,6 +46,10 @@ lib64/
 *.sql
 *.sqlite
 
+# Ignorer le dossier logs et tous les fichiers de logs
+/logs
+**/logs
+
 # Fichiers d'IDE
 .idea/
 .vscode/
