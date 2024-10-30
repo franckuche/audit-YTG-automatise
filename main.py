@@ -61,24 +61,17 @@ URL_CHECK_TEMPLATE = 'https://yourtext.guru/api/check/{}'
 URL_SERP_TEMPLATE = 'https://yourtext.guru/api/serp/{}'
 
 def check_keyword(kw):
-    """Cette fonction vérifie que la requête écrite est compatible avec YTG.
-    Arguments:
-    kw:(string): La requête à vérifier
-    """
-    # On regarde si la requête est trop longue
+    """Cette fonction vérifie que la requête écrite est compatible avec YTG."""
     if len(kw) > 150:
         logger.warning(f"Keyword '{kw}' is too long ({len(kw)} characters).")
         return False
-    # On vérifie que la requête ne contient pas de caractères interdits
     match = re.fullmatch(r'[\w \/"!\'\+\?\.\-:]+', kw)
     if match is None:
         logger.warning(f"Keyword '{kw}' contains invalid characters.")
     return match is not None
 
 def get_url_content(url, retries=3, wait_seconds=5):
-    """
-    Récupère le contenu textuel d'une URL donnée, avec des réessais en cas d'échec pour les erreurs 5xx.
-    """
+    """Récupère le contenu textuel d'une URL donnée, avec des réessais en cas d'échec pour les erreurs 5xx."""
     for attempt in range(1, retries + 1):
         logger.info(f"Processing {url}, attempt {attempt}")
         try:
@@ -104,9 +97,7 @@ def get_url_content(url, retries=3, wait_seconds=5):
     return "Content not available"
 
 def process_csv_and_add_content(nom_fichier_csv):
-    """
-    Traite un fichier CSV en ajoutant le contenu des URLs.
-    """
+    """Traite un fichier CSV en ajoutant le contenu des URLs."""
     colonnes_necessaires = ['KEYWORD', 'URL']
 
     logger.info("Lecture du fichier CSV...")
@@ -114,27 +105,16 @@ def process_csv_and_add_content(nom_fichier_csv):
         df = pd.read_csv(nom_fichier_csv, usecols=colonnes_necessaires)
         logger.info("Fichier CSV chargé avec succès.")
     except FileNotFoundError:
-        logger.error(f"Le fichier {nom_fichier_csv} n'existe pas")
+        logger.error(f"Le fichier {nom_fichier_csv} n'existe pas", exc_info=True)
         exit(1)
     except Exception as e:
-        logger.error(f"Erreur lors de la lecture du fichier CSV : {e}")
+        logger.error(f"Erreur lors de la lecture du fichier CSV : {e}", exc_info=True)
         exit(1)
 
     logger.info("Traitement des URLs et sauvegarde ligne par ligne...")
     df['CONTENT'] = df['URL'].apply(lambda url: get_url_content(url))
 
-    # Utiliser le chemin absolu pour le fichier d'entrée
-    nom_fichier_csv = os.path.abspath(nom_fichier_csv)
-    
-    # S'assurer que nous avons un répertoire valide pour le fichier de sortie
-    output_dir = os.path.dirname(nom_fichier_csv)
-    if not output_dir:
-        output_dir = os.getcwd()  # Utiliser le répertoire de travail actuel si aucun répertoire n'est spécifié
-    
-    output_file = os.path.join(output_dir, "processed_" + os.path.basename(nom_fichier_csv))
-    
-    # Créer le répertoire de sortie s'il n'existe pas
-    os.makedirs(output_dir, exist_ok=True)
+    output_file = os.path.abspath(os.path.join(os.path.dirname(nom_fichier_csv), "processed_" + os.path.basename(nom_fichier_csv)))
 
     try:
         with open(output_file, 'w', newline='', encoding='utf-8') as f:
@@ -142,8 +122,10 @@ def process_csv_and_add_content(nom_fichier_csv):
             f.flush()
             os.fsync(f.fileno())
         logger.info(f"Toutes les données ont été traitées et sauvegardées dans {output_file}")
+        time.sleep(1)
+        
     except Exception as e:
-        logger.error(f"Erreur lors de la sauvegarde du fichier CSV : {e}")
+        logger.error(f"Erreur lors de la sauvegarde du fichier CSV : {e}", exc_info=True)
         return None
 
     if os.path.exists(output_file):
@@ -155,9 +137,7 @@ def process_csv_and_add_content(nom_fichier_csv):
     return output_file
 
 def fetch_guide_id(keyword, lang='fr_fr'):
-    """
-    Récupère l'ID du guide pour un mot-clé donné.
-    """
+    """Récupère l'ID du guide pour un mot-clé donné."""
     logger.info(f"Début de la récupération de l'ID de guide pour le mot-clé: '{keyword}'")
     
     if not check_keyword(keyword):
@@ -166,7 +146,7 @@ def fetch_guide_id(keyword, lang='fr_fr'):
 
     headers = {'KEY': API_KEY, 'accept': 'application/json'}
     data = {'query': keyword, 'lang': lang, 'type': 'premium'}
-    timeout = 30  # augmenter le délai d'attente à 30 secondes
+    timeout = 30
 
     for attempt in range(1, 4):
         try:
@@ -189,17 +169,12 @@ def fetch_guide_id(keyword, lang='fr_fr'):
     return None
 
 def fetch_scores(guide_id, content, keyword):
-    """
-    Récupère les scores SEO pour un contenu donné et un guide spécifique.
-    """
+    """Récupère les scores SEO pour un contenu donné et un guide spécifique."""
     logger.info(f"Récupération des scores pour le guide ID: {guide_id} et le mot-clé: {keyword}")
     URL_CHECK = URL_CHECK_TEMPLATE.format(guide_id)
 
     headers = {'KEY': API_KEY, 'accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded'}
     data = {'content': content}
-    
-    logger.info("Contenu envoyé à l'API :")
-    logger.info(data)
 
     attempt = 1
     while attempt <= 3:
@@ -229,9 +204,7 @@ def fetch_scores(guide_id, content, keyword):
     return None
 
 def fetch_serp_and_calculate_averages(guide_id, keyword):
-    """
-    Récupère les données SERP et calcule les moyennes des scores SOSEO et DSEO.
-    """
+    """Récupère les données SERP et calcule les moyennes des scores SOSEO et DSEO."""
     logger.info(f"Récupération des données SERP pour le guide ID: {guide_id} et le mot-clé: '{keyword}'...")
     attempt = 1
     while attempt <= 3:
@@ -267,9 +240,7 @@ def fetch_serp_and_calculate_averages(guide_id, keyword):
     return None, None, None, None
 
 def process_file(input_file, lang='en'):
-    """
-    Traite le fichier CSV d'entrée et ajoute les informations de contenu.
-    """
+    """Traite le fichier CSV d'entrée et ajoute les informations de contenu."""
     logger.info("Lecture du fichier CSV d'entrée...")
     df = pd.read_csv(input_file)
     output_filename = os.path.join(os.path.dirname(input_file), "processed_with_scores_" + os.path.basename(input_file))
@@ -319,7 +290,7 @@ def process_file(input_file, lang='en'):
                 os.fsync(output_file.fileno())
             logger.info(f"Traitement terminé. Résultats enregistrés dans: {output_filename}")
         except Exception as e:
-            logger.error(f"Erreur lors de la sauvegarde du fichier CSV : {e}")
+            logger.error(f"Erreur lors de la sauvegarde du fichier CSV : {e}", exc_info=True)
             return None
 
     if os.path.exists(output_filename):
@@ -338,4 +309,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     processed_csv = process_csv_and_add_content(args.csv_file)
-    process_file(processed_csv, args.lang)
+    if processed_csv:
+        process_file(processed_csv, args.lang)
