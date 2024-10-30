@@ -116,14 +116,22 @@ def process_csv_and_add_content(nom_fichier_csv):
 
     output_file = os.path.abspath(os.path.join(os.path.dirname(nom_fichier_csv), "processed_" + os.path.basename(nom_fichier_csv)))
 
+    # Créer le répertoire de sortie s'il n'existe pas
+    output_dir = os.path.dirname(output_file)
+    if not os.path.exists(output_dir):
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+            logger.info(f"Répertoire {output_dir} créé avec succès.")
+        except Exception as e:
+            logger.error(f"Erreur lors de la création du répertoire {output_dir} : {e}")
+            return None
+
     try:
         with open(output_file, 'w', newline='', encoding='utf-8') as f:
             df.to_csv(f, index=False)
             f.flush()
             os.fsync(f.fileno())
         logger.info(f"Toutes les données ont été traitées et sauvegardées dans {output_file}")
-        time.sleep(1)
-        
     except Exception as e:
         logger.error(f"Erreur lors de la sauvegarde du fichier CSV : {e}", exc_info=True)
         return None
