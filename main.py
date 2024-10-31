@@ -55,10 +55,39 @@ load_dotenv()
 # Récupérer la clé API depuis les variables d'environnement
 API_KEY = os.getenv('YTG_API')
 
+# Vérifier si l'API_KEY est présente
+if not API_KEY:
+    logger.error("Pas de clé API fournie. Assurez-vous que la variable d'environnement YTG_API est définie.")
+    exit(1)
+
 # Définir les constantes pour les URLs de l'API
 URL_GUIDE = 'https://yourtext.guru/api/guide/'
 URL_CHECK_TEMPLATE = 'https://yourtext.guru/api/check/{}'
 URL_SERP_TEMPLATE = 'https://yourtext.guru/api/serp/{}'
+URL_STATUS = 'https://yourtext.guru/api/status'
+
+def check_account_status():
+    """Vérifie l'état du compte via l'API."""
+    logger.info("Vérification de l'état du compte...")
+    headers = {'KEY': API_KEY, 'accept': 'application/json'}
+    try:
+        response = requests.get(URL_STATUS, headers=headers)
+        if response.status_code == 200:
+            logger.info("État du compte récupéré avec succès.")
+            return response.json()
+        else:
+            logger.error(f"Erreur lors de la vérification de l'état du compte : {response.status_code}")
+            return None
+    except requests.RequestException as e:
+        logger.error(f"Erreur de connexion lors de la vérification de l'état du compte : {e}")
+        return None
+
+# Appel de la fonction de vérification de l'état du compte
+account_status = check_account_status()
+if account_status:
+    logger.info(f"Statut du compte : {account_status}")
+else:
+    logger.warning("Impossible de récupérer l'état du compte.")
 
 def check_keyword(kw):
     """Cette fonction vérifie que la requête écrite est compatible avec YTG."""
