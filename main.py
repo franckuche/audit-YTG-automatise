@@ -75,9 +75,15 @@ def check_account_status():
         if response.status_code == 200:
             logger.info("État du compte récupéré avec succès.")
             return response.json()
+        elif response.status_code == 401:
+            logger.error("Erreur 401 : clé invalide ou IP non autorisée.")
+        elif response.status_code == 429:
+            logger.error("Erreur 429 : Trop de requêtes. Veuillez réessayer plus tard.")
+        elif response.status_code == 500:
+            logger.error("Erreur 500 : Erreur interne du serveur.")
         else:
-            logger.error(f"Erreur lors de la vérification de l'état du compte : {response.status_code}")
-            return None
+            logger.error(f"Erreur inconnue lors de la vérification de l'état du compte : {response.status_code}")
+        return None
     except requests.RequestException as e:
         logger.error(f"Erreur de connexion lors de la vérification de l'état du compte : {e}")
         return None
